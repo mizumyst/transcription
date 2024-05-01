@@ -1,1 +1,38 @@
-[{"speaker": 1, "text": "\u6e05\u6383\u7528\u5177\u306f\u3044\u3064\u3082\u306e\u3088\u3046\u306b\u7686\u3055\u3093\u306b\u6301\u53c2\u3057\u3066\u3082\u3089\u3046\u3053\u3068\u306b\u306a\u3063\u3066\u307e\u3059\u304b\u3089", "start": 0.0, "end": 4.58}, {"speaker": 0, "text": "\u30dc\u30e9\u30f3\u30c6\u30a3\u30a2\u306e\u7686\u3055\u3093\u306b\u306f\u6383\u9664\u7528\u5177\u306e\u3053\u3068\u3082\u9023\u7d61\u3057\u3066\u3042\u308b\u3093\u3067\u3059\u304b", "start": 4.58, "end": 9.3}, {"speaker": 1, "text": "\u3048\u3063\u3068\u3044\u3064\u3082\u306e\u3053\u3068\u306a\u306e\u3067\u7279\u306b\u9023\u7d61\u306f", "start": 9.3, "end": 12.9}]
+{
+    "metadata": {
+        "location": "Vancouver",
+        "date": "1994 April 17",
+        "speakers": [
+            "X121/Koizumi",
+            "1/Tanaka"
+        ],
+        "time": 13312
+    },
+    "transcribe": [
+        {
+            "speaker": "X121/Koizumi",
+            "text": "\u6e05\u6383\u7528\u5177\u306f\u3044\u3064\u3082\u306e\u3088\u3046\u306b\u7686\u3055\u3093\u306b\u6301\u53c2\u3057\u3066\u3082\u3089\u3046\u3053\u3068\u306b\u306a\u3063\u3066\u307e\u3059\u304b\u3089\u3002",
+            "timestamp": [
+                0.2,
+                4.5200000000000005
+            ]
+        },
+        {
+            "speaker": "1/Tanaka",
+            "text": "\u30dc\u30e9\u30f3\u30c6\u30a3\u30a2\u306e\u7686\u3055\u3093\u306b\u306f\u6383\u9664\u7528\u5177\u306e\u3053\u3068\u3082\u9023\u7d61\u3057\u3066\u3042\u308b\u3093\u3067\u3059\u304b?",
+            "timestamp": [
+                4.97,
+                8.87
+            ]
+        },
+        {
+            "speaker": "X121/Koizumi",
+            "text": "\u3048\u3063\u3068\u3001\u3044\u3064\u3082\u306e\u3053\u3068\u306a\u306e\u3067\u7279\u306b\u9023\u7d61\u306f\u2026",
+            "timestamp": [
+                9.33,
+                12.99
+            ]
+        }
+    ],
+    "translate": " The cleaning tools will be handed over to everyone as usual. Have the volunteers been in touch with you about the cleaning tools? Well, it's just like always, so I haven't been in touch with anyone."
+}

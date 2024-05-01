@@ -4,39 +4,38 @@ import numpy as np
 import torch
 from pyannote.audio import Pipeline
 from torchaudio import functional as F
-from transformers import pipeline
 from transformers.pipelines.audio_utils import ffmpeg_read
-from numba import cuda
+from tqdm import tqdm
+
+import whisper
+from intervaltree import IntervalTree
+from collections import Counter
+
+whisper.DecodingOptions(fp16=False)
+device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+
 
 def reset_cuda(model):
     del model
     gc.collect()
 
-    device = cuda.get_current_device()
-    device.reset()
+    torch.cuda.empty_cache()
 
 
-def init_diarizer_pipeline(
+def init_diarizer(
         diarizer_model="pyannote/speaker-diarization-3.1",
         token=None
     ):
-    diarizer_pipeline = Pipeline.from_pretrained(diarizer_model, use_auth_token=token)
-    return diarizer_pipeline
+    model = Pipeline.from_pretrained(diarizer_model, use_auth_token=token).to(torch.device(device))
+    return model
 
 
-def init_asr_pipeline(
-        asr_model="openai/whisper-large-v3",
+def init_whisper(
+        asr_model="large-v3",
         token=None
-):
-    asr_pipeline = pipeline(
-        "automatic-speech-recognition",
-        model=asr_model,
-        chunk_length_s=30,
-        token=token,
-        batch_size=24,
-        return_timestamps=True
-    )
-    return asr_pipeline
+    ):
+    model = whisper.load_model(asr_model).to(device)
+    return model
 
 
 def preprocess(inputs, sampling_rate):
@@ -65,25 +64,70 @@ def preprocess(inputs, sampling_rate):
     return inputs, diarizer_inputs
 
 
+class TQDMProgressHook:
+    """Hook to show progress of each internal step
+
+    Parameters
+    ----------
+    transient: bool, optional
+        Clear the progress on exit. Defaults to False.
+
+    Example
+    -------
+    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization")
+    with ProgressHook() as hook:
+       output = pipeline(file, hook=hook)
+    """
+
+    def __init__(self, transient: bool = False):
+        self.transient = transient
+
+    def __enter__(self):
+        self.progress = dict()
+        return self
+
+    def __exit__(self, *args):
+        for progress in self.progress.values():
+            progress.close()
+
+    def __call__(
+        self,
+        step_name,
+        step_artifact,
+        file = None,
+        total = None,
+        completed=None,
+    ):
+        if completed is None:
+            completed = total = 1
+
+        if not hasattr(self, "step_name") or step_name != self.step_name:
+            self.progress[step_name] = tqdm(total=total, desc=step_name, leave=False)
+
+        self.progress[step_name].update(completed)
+
+        # force refresh when completed
+        if completed >= total:
+            self.progress[step_name].refresh()
+
+
 def diarize(
         diarizer_pipeline,
         diarizer_inputs,
         sampling_rate="",
         ):
 
-    diarization = diarizer_pipeline({
-        "waveform": diarizer_inputs,
-        "sample_rate": sampling_rate
-    })
+    with TQDMProgressHook() as hook:
+        diarization = diarizer_pipeline({
+            "waveform": diarizer_inputs.to(device),
+            "sample_rate": sampling_rate
+        }, hook=hook)
 
     segments = []
     for segment, track, label in diarization.itertracks(yield_label=True):
         segments.append({
-            'segment': {
-                'start': segment.start,
-                'end': segment.end
-            },
-            'track': track,
+            'start': segment.start,
+            'end': segment.end,
             'label': label
         })
 
@@ -99,20 +143,16 @@ def diarize(
         if cur_segment["label"] != prev_segment["label"] and i < len(segments):
             # add the start/end times for the super-segment to the new list
             new_segments.append({
-                "segment": {
-                    "start": prev_segment["segment"]["start"],
-                    "end": cur_segment["segment"]["start"]
-                },
+                "start": prev_segment["start"],
+                "end": cur_segment["start"],
                 "speaker": prev_segment["label"],
             })
             prev_segment = segments[i]
 
     # add the last segment(s) if there was no speaker change
     new_segments.append({
-        "segment": {
-            "start": prev_segment["segment"]["start"],
-            "end": cur_segment["segment"]["end"]
-        },
+        "start": prev_segment["start"],
+        "end": cur_segment["end"],
         "speaker": prev_segment["label"],
     })
 
@@ -123,48 +163,57 @@ def transcribe(
     asr_pipeline,
     inputs,
     segments,
-    sampling_rate,
-    group_by_speaker=True
+    language='ja',
+    task='transcribe',
+    count=False
 ):
 
-    asr_out = asr_pipeline(
-        {
-            "array": inputs,
-            "sampling_rate": sampling_rate
-        },
-        return_timestamps=True,
-        generate_kwargs={
-            "language": "<|ja|>",
-            "task": "transcribe"
-        }
-    )
-    transcript = asr_out["chunks"]
+    t = IntervalTree()
 
-    # get the end timestamps for each chunk from the ASR output
-    end_timestamps = np.array([chunk["timestamp"][-1] for chunk in transcript])
-    segmented_preds = []
-
-    # align the diarizer timestamps and the ASR timestamps
+    timestamps = []
     for segment in segments:
-        # get the diarizer end timestamp
-        end_time = segment["segment"]["end"]
-        # find the ASR end timestamp that is closest to the diarizer's end timestamp and cut the transcript to here
-        upto_idx = np.argmin(np.abs(end_timestamps - end_time))
+        speaker, start, end = segment['speaker'], segment['start'], segment['end']
+        
+        timestamps.append(start)
+        timestamps.append(end)
+        t.addi(start, end, speaker)
 
-        if group_by_speaker:
-            segmented_preds.append({
-                "speaker":
-                segment["speaker"],
-                "text":
-                "".join([chunk["text"] for chunk in transcript[:upto_idx + 1]]),
-                "timestamp": (transcript[0]["timestamp"][0], transcript[upto_idx]["timestamp"][1]),
-            })
+    output = asr_pipeline.transcribe(
+        inputs,
+        verbose=False,
+        clip_timestamps=timestamps,
+        language=language,
+        task=task
+    )
+
+    preds = []
+    if count:
+        speakers = Counter()
+
+    text = output['text']
+
+    for segment in output['segments']:
+        start, end = segment['start'], segment['end']
+        overlaps = t.envelop(start, end)
+        if not overlaps:
+            overlaps = t.at((start + end) // 2)
+
+        if overlaps:
+            interval = min(overlaps, key=lambda iv: iv.end-iv.begin)
+            speaker = interval.data
         else:
-            for i in range(upto_idx + 1):
-                segmented_preds.append({"speaker": segment["speaker"], **transcript[i]})
+            speaker = speakers.most_common(1)[0][0]
 
-        # crop the transcripts and timestamp lists according to the latest timestamp (for faster argmin)
-        transcript = transcript[upto_idx + 1:]
-        end_timestamps = end_timestamps[upto_idx + 1:]
+        preds.append({
+            'speaker': speaker,
+            'text': segment['text'],
+            'timestamp': (segment['start'], segment['end'])
+        })
 
-    return segmented_preds
+        if count:
+            speakers[speaker] += segment['end'] - segment['start']
+
+    if count:
+        return text, preds, speakers.most_common()
+
+    return text, preds
