@@ -293,13 +293,13 @@ if __name__ == '__main__':
                     with open(path, 'r', encoding='utf-8') as file:
                         data = read_xml(file, metadata[path.stem], "")
                         write_docx(data, path.with_suffix('.docx'))
-            
+
             elif source == 'json':
                 for path in directory.glob("*.json"):
                     with open(path, 'r', encoding='utf-8') as file:
                         data = json.load(file)
                         write_docx(data, path.with_suffix('.docx'))
-                
+
         case 'json':
             for path in directory.glob("*.eaf"):
                 with open(path, 'r', encoding='utf-8') as file:
