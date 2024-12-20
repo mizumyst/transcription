@@ -273,7 +273,7 @@ def read_xml(input_file, metadata, translate):
 
 
 if __name__ == '__main__':
-    directory, target, *other = sys.argv    # TODO: one day this will be done with argparse
+    name, directory, target, *other = sys.argv    # TODO: one day this will be done with argparse
     source = None if not other else other[0]
 
     directory = Path(directory)

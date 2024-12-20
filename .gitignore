@@ -1,3 +1,4 @@
 _temp/
+data_unused/
 .work/
 **/__pycache__/

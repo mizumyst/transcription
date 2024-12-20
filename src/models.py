@@ -120,16 +120,20 @@ def diarize(
     with TQDMProgressHook() as hook:
         diarization = diarizer_pipeline({
             "waveform": diarizer_inputs.to(device),
-            "sample_rate": sampling_rate
+            "sample_rate": sampling_rate,
+            "num_speakers": 3 #TODO make this into an argument once its verified working
         }, hook=hook)
 
     segments = []
     for segment, track, label in diarization.itertracks(yield_label=True):
-        segments.append({
-            'start': segment.start,
-            'end': segment.end,
-            'label': label
-        })
+        #remove null length segments as they terminate the script with an error
+        if segment.start != segment.end:
+            print(f"Segment added: start {segment.start} end {segment.end} speaker {label}")
+            segments.append({
+                'start': segment.start,
+                'end': segment.end,
+                'label': label
+            })
 
     # diarizer output may contain consecutive segments from the same speaker (e.g. {(0 -> 1, speaker_1), (1 -> 1.5, speaker_1), ...})
     # we combine these segments to give overall timestamps for each speaker's turn (e.g. {(0 -> 1.5, speaker_1), ...})
@@ -176,7 +180,12 @@ def transcribe(
         
         timestamps.append(start)
         timestamps.append(end)
-        t.addi(start, end, speaker)
+
+        #catch errors with null intervals
+        try:
+            t.addi(start, end, speaker)
+        except ValueError as e:
+            print(e)
 
     output = asr_pipeline.transcribe(
         inputs,
@@ -201,7 +210,7 @@ def transcribe(
         if overlaps:
             interval = min(overlaps, key=lambda iv: iv.end-iv.begin)
             speaker = interval.data
-        else:
+        elif count:
             speaker = speakers.most_common(1)[0][0]
 
         preds.append({
