@@ -263,6 +263,5 @@ if __name__ == '__main__':
     main(
         input_paths,
         manifest,
-        #token=config['token']
-        token = "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"
+        token=config['token']
     )
