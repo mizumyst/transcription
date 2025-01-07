@@ -101,10 +101,10 @@ def transcribe(paths, do_translate=False, force=False):
             task='translate'
         )
 
-        with open(path / '2_preds_tr', 'wb') as file:
+        with open(path / '2_preds_tr', 'wb', encoding='utf-8') as file:
             pickle.dump(preds_tr, file, protocol=pickle.HIGHEST_PROTOCOL)
 
-        with open(path / '2_text_tr', 'w') as file:
+        with open(path / '2_text_tr', 'w', encoding='utf-8') as file:
             file.write(text)
 
     models.reset_cuda(current_model)
